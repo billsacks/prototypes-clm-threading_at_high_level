@@ -1,6 +1,6 @@
 program clm_driver
-  use clm_instMod, only : clm_instInit, clm_instances
-  use decompMod, only : get_proc_clumps, get_clump_bounds, bounds_type
+  use clm_instMod
+  use decompMod, only : get_proc_clumps, get_clump_bounds
 
   implicit none
 
@@ -26,11 +26,13 @@ program clm_driver
   ! Note, though: *IF* we could rework the driver so that the bulk of the driver loop
   ! could be within a single nclumps loop (which would require reworking some routines
   ! that are in the middle of the driver loop, which currently cannot work in a threaded
-  ! region): THEN we could have an outer driver routine that looked like:
+  ! region); and if we reworked clm_instMod to have nclumps instances of clm_inst, with a
+  ! single instance of each derived type inside there: THEN we could have an outer driver
+  ! routine that looked like:
   !   do nc = 1, nclumps
   !      call clm_driver(clm_inst(nc))
   ! and the main clm_driver routine could then be written without any threading-related
-  ! knowledge.
+  ! knowledge (although references to object foo would now be clm_inst%foo)
   ! ------------------------------------------------------------------------
 
   nclumps = get_proc_clumps()
@@ -38,24 +40,22 @@ program clm_driver
   !$OMP PARALLEL DO PRIVATE(nc, bounds_clump)
   do nc = 1, nclumps
      print *, 'executing: ', nc, OMP_GET_THREAD_NUM()
-
-     associate(clm_inst => clm_instances(nc))
-
+     
      call get_clump_bounds(nc, bounds_clump)
 
-     ! Here is a subroutine call that illustrates passing whole derived types.
-     call clm_inst%irrigation_inst%CalcIrrigationNeeded(bounds_clump, &
-          clm_inst%temperature_inst)
+     ! Here is a subroutine call that illustrates passing whole derived types. Note that
+     ! we reference a single instance of any derived type (e.g., irrigation_inst(nc)).
+     ! That way, the science routines don't need to even know about the fact that there
+     ! are multiple instances of each derived type
+     call irrigation_inst(nc)%CalcIrrigationNeeded(bounds_clump, temperature_inst(nc))
 
      ! Here is a subroutine call that illustrates passing arrays.
-     call clm_inst%irrigation_inst%SomeOtherRoutine(bounds_clump, &
-          mytemp_col = clm_inst%temperature_inst%mytemp_col)
+     call irrigation_inst(nc)%SomeOtherRoutine(bounds_clump, &
+          mytemp_col = temperature_inst(nc)%mytemp_col)
      ! In the past, this would have looked like:
      ! call irrigation_inst%SomeOtherRoutine(bounds_clump, &
      !      mytemp_col = temperature_inst%mytemp_col(bounds_clump%begc:bounds_clump%endc))
 
-     end associate
-     
   end do
 
   ! ------------------------------------------------------------------------
@@ -80,7 +80,7 @@ contains
        call get_clump_bounds(nc, bounds_clump)
 
        do p = 1, bounds_clump%endp
-          print *, p, clm_instances(nc)%irrigation_inst%qflx_irrig_patch(p)
+          print *, p, irrigation_inst(nc)%qflx_irrig_patch(p)
        end do
     end do
 
@@ -92,9 +92,7 @@ contains
        call get_clump_bounds(nc, bounds_clump)
 
        do c = 1, bounds_clump%endc
-          print *, c, &
-               clm_instances(nc)%temperature_inst%mytemp_col(c), &
-               clm_instances(nc)%irrigation_inst%qflx_irrig_col(c)
+          print *, c, temperature_inst(nc)%mytemp_col(c), irrigation_inst(nc)%qflx_irrig_col(c)
        end do
     end do    
 

@@ -6,32 +6,48 @@ module clm_instMod
   
   implicit none
   save
+
+  public :: clm_instInit
   
-  ! ALTERNATIVE: Rather than having arrays of each science instance, we could instead make
-  ! clm_inst itself an object. Then we would have nclumps instances of clm_inst, each of
-  ! which has a single instance of irrigation_type, temperature_type, etc. I suspect that
-  ! would have some benefits and some drawbacks compared to this implementation.
-  type(irrigation_type), allocatable :: irrigation_inst(:)
-  type(temperature_type), allocatable :: temperature_inst(:)
+  type, public :: clm_inst_type
+     type(irrigation_type) :: irrigation_inst
+     type(temperature_type) :: temperature_inst
+   contains
+     procedure, private :: Init
+  end type clm_inst_type
+
+  ! We'll have one clm instance for each clump
+  type(clm_inst_type), allocatable :: clm_instances(:)
 
 contains
 
   subroutine clm_instInit()
+    ! Initializes ALL instances
     integer :: nclumps, nc
     type(bounds_type) :: bounds_clump
 
     nclumps = get_proc_clumps()
 
-    allocate(irrigation_inst(nclumps))
-    allocate(temperature_inst(nclumps))
+    allocate(clm_instances(nclumps))
     
     !$OMP PARALLEL DO PRIVATE(nc, bounds_clump)
     do nc = 1, nclumps
        call get_clump_bounds(nc, bounds_clump)
-       
-       call irrigation_inst(nc)%init(bounds_clump)
-       call temperature_inst(nc)%init(bounds_clump, nc)
+       call clm_instances(nc)%Init(bounds_clump, nc)
     end do
   end subroutine clm_instInit
+
+  subroutine Init(this, bounds, nc)
+    ! Initializes a single instance
+    class(clm_inst_type), intent(inout) :: this
+    type(bounds_type), intent(in) :: bounds
+
+    ! In reality, we probably won't need nc (the clump index). But for this prototype,
+    ! it's used to initialize each temperature instance uniquely.
+    integer, intent(in) :: nc
+
+    call this%irrigation_inst%init(bounds)
+    call this%temperature_inst%init(bounds, nc)
+  end subroutine Init
 
 end module clm_instMod

@@ -1,4 +1,4 @@
-# prototypes-clm_threading\_at\_high\_level
+# prototypes-clm-threading\_at\_high\_level
 Prototype for reorganizing CLM's threading so it occurs at a higher level,
 preventing complexity with array passing.
 
@@ -38,6 +38,41 @@ Things to particularly examine
 
     Shows what the driver loop would look like, in terms of calls to subroutines.
 
+
+Notes about the ALT (alternative) implementation
+================================================
+
+I am providing two implementations of clm\_instMod and clm\_driver. In the main
+implementation (without 'ALT' in the file names), I have introduced a class to
+hold the various instances. What I like about this is that it makes it more
+explicit that (for example) a given irrigation instance is tied to a given
+temperature instance: you would refer to these as:
+
+    clm_instances(nc)%irrigation_inst
+    clm_instances(nc)%temperature_inst
+
+(so, note that they are both members of the same object), rather than
+
+    irrigation_inst(nc)
+    temperature_inst(nc)
+
+(in which there is an apparent, but not explicit connection between the two).
+
+Another advantage is that, if we use an associate statement like I do in this
+clm_driver example, it removes almost all need for including an (nc) index in
+driver code (or anywhere else, for that matter): you would just need this index
+in the one line:
+
+    associate(clm_inst => clm_instances(nc))
+
+Yet another advantage is that this gives you a clear place to put any metadata about
+each instance. For example, you could store the bounds of each instance in the
+new clm\_inst\_type.
+
+However, the downside is that it is a little harder to refer to things like
+irrigation_inst from the driver. I lean towards the main implementation despite
+this downside, but would be willing to go with the alternative implementation,
+which is closer to what we have right now (with 'ALT' in the file names).
 
 Advantages
 ==========
